@@ -1,0 +1,403 @@
+{{ 'component-card.css' | asset_url | stylesheet_tag }}
+{{ 'component-price.css' | asset_url | stylesheet_tag }}
+{{ 'section-related-products.css' | asset_url | stylesheet_tag }}
+
+{% if section.settings.image_shape == 'blob' %}
+  {{ 'mask-blobs.css' | asset_url | stylesheet_tag }}
+{% endif %}
+
+{% style %}
+  .section-{{ section.id }}-padding {
+    padding-top: {{ section.settings.padding_top | times: 0.75 | round: 0 }}px;
+    padding-bottom: {{ section.settings.padding_bottom | times: 0.75 | round: 0 }}px;
+  }
+
+  @media screen and (min-width: 750px) {
+    .section-{{ section.id }}-padding {
+      padding-top: {{ section.settings.padding_top }}px;
+      padding-bottom: {{ section.settings.padding_bottom }}px;
+    }
+  }
+{% endstyle %}
+
+<div class="color-{{ section.settings.color_scheme }} gradient">
+  <div
+    class="related-products page-width section-{{ section.id }}-padding isolate{% if settings.animations_reveal_on_scroll %} scroll-trigger animate--slide-in{% endif %}"
+  >
+    <h2 class="related-products__heading inline-richtext {{ section.settings.heading_size }}">
+      {{ section.settings.heading }}
+    </h2>
+    <ul
+      class="grid product-grid grid--{{ section.settings.columns_desktop }}-col-desktop grid--{{ section.settings.columns_mobile }}-col-tablet-down"
+      role="list"
+      id="recently-viewed-container"
+    >
+      <!-- Produkte werden hier dynamisch eingefügt -->
+    </ul>
+  </div>
+  {% if section.settings.image_shape == 'arch' %}
+    {% render 'mask-arch' %}
+  {% endif %}
+</div>
+
+<script defer>
+
+    function formatMoney(cents, format = "€{{amount}} EUR") {
+      if (typeof cents === 'string') {
+        cents = cents.replace('.', '');
+      }
+      var value = '';
+      var amount = cents / 100;
+      value = format.replace('{{amount}}', amount.toFixed(2));
+      return value;
+    }
+
+  function formatUnit(unit, format = "{{unit}}") {
+    return format.replace('{{unit}}', unit);
+  }
+  
+  function checkAndAddUnitPriceMeasurement(products) {
+    products.forEach(function(product) {
+      if (product.variants && product.variants.length > 0) {
+        for (var i = 0; i < product.variants.length; i++) {
+          if (!product.variants[i].unit_price_measurement) {
+            product.variants[i].unit_price_measurement = {
+              reference_value: '',
+              reference_unit: ''
+            };
+          } else {
+            if (!product.variants[i].unit_price_measurement.reference_value) {
+              product.variants[i].unit_price_measurement.reference_value = '';
+            }
+            if (!product.variants[i].unit_price_measurement.reference_unit) {
+              product.variants[i].unit_price_measurement.reference_unit = '';
+            }
+          }
+        }
+      } else {
+        // If there are no variants, add the unit_price_measurement to the product itself
+        product.unit_price_measurement = {
+          reference_value: '',
+          reference_unit: ''
+        };
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var recentlyViewed = JSON.parse(localStorage.getItem('recentlyViewed')) || [];
+    var container = document.getElementById('recently-viewed-container');
+
+    if (recentlyViewed.length > 0) {
+      recentlyViewed.reverse(); 
+      var requests = recentlyViewed.map(function(handle) {
+        return fetch('/products/' + handle + '.js')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok for ' + handle);
+            }
+            return response.json();
+          })
+          .catch(error => {
+            console.error('Fetch error for handle:', handle, error);
+            return null;
+          });
+      });
+
+      Promise.all(requests).then(function(products) {
+        checkAndAddUnitPriceMeasurement(products);
+        products.forEach(function(product) {
+          
+          console.log(product)
+          if (product) {
+            var productHTML = `
+              <li class="grid__item">
+  <div class="card-wrapper product-card-wrapper underline-links-hover">
+    <div class="card card--standard card--media" style="--ratio-percent: 100%">
+      <div
+        class="card__inner color-background-2 gradient ratio"
+        style="--ratio-percent: 100%"
+      >
+        <div class="card__media">
+          <div class="media media--transparent media--hover-effect">
+            <img
+              src="${product.images[0]}"
+              alt="${product.title}"
+              class="motion-reduce"
+              loading="lazy"
+            />
+          </div>
+        </div>
+        <div class="card__content">
+          ${product.compare_at_price > product.price ? ` <div class="card__badge bottom left">
+            <span
+              id="Badge--${product.id}"
+              class="badge badge--bottom-left color-accent-2"
+              >Sale</span
+            >
+          </div> ` : ``}
+          <div class="card__information">
+            <h3 class="card__heading h5" id="title--${product.id}">
+              <a
+                href="/products/${product.handle}"
+                id="CardLink--${product.id}"
+                class="full-unstyled-link"
+                aria-labelledby="CardLink--${product.id} Badge--${product.id}"
+              >
+                ${product.title}
+              </a>
+            </h3>
+          </div>
+        </div>
+      </div>
+      <div class="card__content">
+        <div class="card__information" style="display: block">
+          <h3 class="card__heading h5" id="title--${product.id}">
+            <a
+              href="/products/${product.handle}"
+              id="CardLink--${product.id}"
+              class="full-unstyled-link"
+              aria-labelledby="CardLink--${product.id} Badge--${product.id}"
+            >
+              ${product.title}
+            </a>
+            <div class="card-information">
+              <span class="caption-large light"></span>
+              <div class="price price--on-sale">
+                <div class="price__container">
+                  <div class="price__regular">
+                    <span class="visually-hidden visually-hidden--inline"
+                      >Normaler Preis</span
+                    >
+                    <span class="price-item price-item--regular">
+                      Von  ${formatMoney(product.price)}
+                    </span>
+                  </div>
+                  <div class="price__sale">
+                  ${product.compare_at_price > product.price ? `
+                    <span class="visually-hidden visually-hidden--inline"
+                      >Normaler Preis</span
+                    >
+                    <span>                    
+                      <s class="price-item price-item--regular">
+                         ${formatMoney(product.compare_at_price)}
+                      </s> </span
+                    ><span class="visually-hidden visually-hidden--inline"
+                      >Verkaufspreis</span
+                    >
+                    <span class="price-item price-item--sale price-item--last">
+                      Von  ${formatMoney(product.price)} 
+                    </span>
+                    ` : `
+                      Von  ${formatMoney(product.price)} 
+                    ` }
+                  </div>
+                  <small class="unit-price caption">
+                    <span class="visually-hidden">Stückpreis</span>
+                    <span class="price-item price-item--last">
+                      <span> ${formatMoney(product.variants[0].unit_price)} </span>
+                      <span aria-hidden="true">/</span>
+                      <span class="visually-hidden">&nbsp;pro&nbsp;</span>
+                      <span
+                        > ${formatUnit(product.variants[0].unit_price_measurement.reference_unit)} 
+                      </span>
+                    </span>
+                  </small>
+                </div>
+              </div>
+            </div>
+          </h3>
+        </div>
+      </div>
+    </div>
+  </div>
+</li>
+            `;
+            container.insertAdjacentHTML('beforeend', productHTML);
+          }
+        });
+
+        if (products.every(product => product === null)) {
+          container.innerHTML = '<p>Fehler beim Laden der kürzlich angesehenen Produkte.</p>';
+        }
+      }).catch(function(error) {
+        console.error('Error in Promise.all:', error);
+        container.innerHTML = '<p>Fehler beim Laden der kürzlich angesehenen Produkte.</p>';
+      });
+    } else {
+      container.innerHTML = '<p>Keine kürzlich angesehenen Produkte.</p>';
+    }
+  });
+</script>
+
+{% schema %}
+{
+  "name": "Recently Viewed Products",
+  "settings": [
+    {
+      "type": "inline_richtext",
+      "id": "heading",
+      "default": "Kürzlich angesehene Produkte",
+      "label": "Überschrift"
+    },
+    {
+      "type": "select",
+      "id": "heading_size",
+      "options": [
+        {
+          "value": "h2",
+          "label": "H2"
+        },
+        {
+          "value": "h1",
+          "label": "H1"
+        },
+        {
+          "value": "h0",
+          "label": "H0"
+        }
+      ],
+      "default": "h2",
+      "label": "Überschrift Größe"
+    },
+    {
+      "type": "range",
+      "id": "products_to_show",
+      "min": 2,
+      "max": 10,
+      "step": 1,
+      "default": 4,
+      "label": "Anzahl der anzuzeigenden Produkte"
+    },
+    {
+      "type": "range",
+      "id": "columns_desktop",
+      "min": 1,
+      "max": 6,
+      "step": 1,
+      "default": 4,
+      "label": "Spalten auf dem Desktop"
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "Farbschema",
+      "default": "scheme-1"
+    },
+    {
+      "type": "select",
+      "id": "image_ratio",
+      "options": [
+        {
+          "value": "adapt",
+          "label": "Anpassen"
+        },
+        {
+          "value": "portrait",
+          "label": "Portrait"
+        },
+        {
+          "value": "square",
+          "label": "Quadrat"
+        }
+      ],
+      "default": "adapt",
+      "label": "Bildverhältnis"
+    },
+    {
+      "type": "select",
+      "id": "image_shape",
+      "options": [
+        {
+          "value": "default",
+          "label": "Standard"
+        },
+        {
+          "value": "arch",
+          "label": "Bogen"
+        },
+        {
+          "value": "blob",
+          "label": "Blob"
+        },
+        {
+          "value": "chevronleft",
+          "label": "Chevron Links"
+        },
+        {
+          "value": "chevronright",
+          "label": "Chevron Rechts"
+        },
+        {
+          "value": "diamond",
+          "label": "Diamant"
+        },
+        {
+          "value": "parallelogram",
+          "label": "Parallelogram"
+        },
+        {
+          "value": "round",
+          "label": "Rund"
+        }
+      ],
+      "default": "default",
+      "label": "Bildform"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_secondary_image",
+      "default": false,
+      "label": "Sekundäres Bild anzeigen"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_vendor",
+      "default": false,
+      "label": "Anbieter anzeigen"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_rating",
+      "default": false,
+      "label": "Bewertung anzeigen"
+    },
+    {
+      "type": "select",
+      "id": "columns_mobile",
+      "default": "2",
+      "label": "Spalten auf mobilen Geräten",
+      "options": [
+        {
+          "value": "1",
+          "label": "1"
+        },
+        {
+          "value": "2",
+          "label": "2"
+        }
+      ]
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Abstand oben",
+      "default": 36
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Abstand unten",
+      "default": 36
+    }
+  ]
+}
+{% endschema %}
